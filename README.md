@@ -1,8 +1,8 @@
 # Enterprise RAG Q&A System
 
-A production-ready Retrieval-Augmented Generation (RAG) platform that allows users to upload enterprise documents (PDF, DOCX, TXT, MD) and interact with their content using AI-powered natural language queries. Built with a FastAPI backend and a modern vanilla JS/CSS frontend.
+A production-ready Retrieval-Augmented Generation (RAG) platform that allows users to upload enterprise documents (PDF, DOCX, TXT, MD) and interact with their content using AI-powered natural language queries. Built with a FastAPI backend and a stunning, state-of-the-art modern frontend.
 
-![UI Screenshot](https://via.placeholder.com/1200x600/1e1e2d/ffffff?text=Enterprise+RAG+Q%26A+System+Interface)
+![UI Screenshot](https://via.placeholder.com/1200x600/0f172a/10b981?text=Enterprise+RAG+Q%26A+System+Interface)
 
 ## 🚀 Key Features
 
@@ -10,7 +10,7 @@ A production-ready Retrieval-Augmented Generation (RAG) platform that allows use
 - **Smart Chunking**: Automated processing of documents using LangChain's recursive character splitting.
 - **Efficient Vector Search**: Powered by **FAISS** and **HuggingFace** embeddings (`all-MiniLM-L6-v2`) for ultra-fast, semantic document retrieval.
 - **AI-Powered Answers**: Integrated with **Groq (Llama 3.1 8B)** to provide context-aware, cited, and intelligent responses.
-- **Modern UI/UX**: A sleek, dark-themed interface featuring glassmorphism, responsive design, and smooth animations.
+- **Premium Glassmorphic UI**: A breathtaking, dynamic gradient interface utilizing glassmorphism (`backdrop-filter`), micro-animations, floating elements, and `Outfit` typography to deliver a state-of-the-art user experience.
 - **RESTful API**: Fully documented API endpoints for document management and querying.
 
 ## 🛠️ Technology Stack
@@ -79,8 +79,3 @@ rag1/
 ├── run.py              # Application startup script
 └── .env                # Environment configuration
 ```
-
-## 🔒 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
