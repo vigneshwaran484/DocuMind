@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DocuMind AI</title>
+  <meta name="description" content="Enterprise RAG Q&A"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <!-- Marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  
+  <div class="app-container">
+    
+    <!-- Sidebar / Knowledge Base -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="40" height="40" rx="12" fill="var(--accent)"/>
+            <path d="M10 14h20M10 20h14M10 26h17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="30" cy="26" r="5" fill="#fff" opacity="0.9"/>
+          </svg>
+          DocuMind <span class="badge">AI</span>
+        </div>
+        <button class="new-chat-btn" id="newChatBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          New Chat
+        </button>
+      </div>
+
+      <div class="sidebar-content">
+        <div class="section-title">
+          Knowledge Base
+          <span id="docCountBadge" class="count-badge">0</span>
+        </div>
+        
+        <!-- Upload Area -->
+        <div class="upload-area" id="uploadZone">
+          <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" multiple hidden/>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span>Upload Documents</span>
+          <small>PDF, DOCX, TXT</small>
+        </div>
+
+        <div class="upload-progress" id="uploadProgress" style="display: none;">
+          <div class="progress-bar-fill" id="progressBarFill"></div>
+        </div>
+
+        <!-- Document List -->
+        <div class="doc-list" id="docList">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-profile">
+          <div class="avatar user>">U</div>
+          <div class="user-info">
+            <span class="user-name">Enterprise User</span>
+            <span class="system-status" id="statusText">System Ready</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="chat-area">
+      <div class="chat-header">
+        <div class="model-selector">
+          <span class="model-name">DocuMind <strong>llama-3.1-8b</strong></span>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        
+        <!-- Welcome Screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-logo">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="40" height="40" rx="12" fill="var(--accent)"/>
+              <path d="M10 14h20M10 20h14M10 26h17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="30" cy="26" r="5" fill="#fff" opacity="0.9"/>
+            </svg>
+          </div>
+          <h1>How can I help you today?</h1>
+          <p>Ask questions about your uploaded enterprise documents.</p>
+          
+          <div class="suggestions" id="suggestions">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        
+      </div>
+
+      <!-- Input Bar -->
+      <div class="chat-input-container">
+        <div class="chat-input-box">
+          <textarea id="questionInput" placeholder="Message DocuMind..." rows="1"></textarea>
+          <button id="sendBtn" class="send-button" disabled>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="disclaimer">DocuMind AI can make mistakes. Consider verifying important information from the sources.</div>
+      </div>
+      
+    </main>
+
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
