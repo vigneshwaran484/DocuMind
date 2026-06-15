@@ -36,6 +36,12 @@ app.include_router(documents.router, prefix="/api", tags=["Documents"])
 async def health():
     return {"status": "ok", "service": "Enterprise RAG Q&A System"}
 
+@app.get("/api/debug", tags=["Health"])
+async def debug():
+    from backend.supabase_store import test_connection
+    conn = test_connection()
+    return {"supabase": conn}
+
 # ── Serve Frontend Static Files ───────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 
