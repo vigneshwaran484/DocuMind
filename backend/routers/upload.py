@@ -4,6 +4,7 @@ POST /api/upload
 """
 import os
 import shutil
+import logging
 from fastapi import APIRouter, BackgroundTasks, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -11,6 +12,7 @@ from backend.config import UPLOADS_PATH
 from backend.ingest import ingest_document
 from backend.vectorstore import add_documents
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
@@ -18,9 +20,13 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 def _ingest_in_background(save_path: str, filename: str):
     try:
+        logger.info("Background ingest started for %s", filename)
         chunks, doc_id = ingest_document(save_path, filename)
+        logger.info("Ingested %d chunks for %s", len(chunks), filename)
         add_documents(chunks, doc_id, filename)
-    except Exception:
+        logger.info("Successfully indexed %s (doc_id=%s)", filename, doc_id)
+    except Exception as e:
+        logger.error("Background ingest FAILED for %s: %s", filename, e, exc_info=True)
         if os.path.exists(save_path):
             os.remove(save_path)
 

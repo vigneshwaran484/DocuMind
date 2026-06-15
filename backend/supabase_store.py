@@ -6,7 +6,6 @@ Storage bucket : "vectorstore"  (create once in Supabase dashboard)
 Postgres table : "documents"    (created automatically on first use)
 """
 import os
-import glob as _glob
 import logging
 from typing import List, Dict, Optional
 
@@ -59,31 +58,33 @@ def test_connection() -> dict:
 # ── FAISS index sync ──────────────────────────────────────────────────────────
 
 def upload_index() -> None:
-    """Upload every file in the local FAISS index folder to Supabase Storage."""
+    """Upload the two FAISS index files (index.faiss, index.pkl) to Supabase Storage."""
     client = _get_client()
-    pattern = os.path.join(VECTORSTORE_PATH, "faiss_index*")
-    files = _glob.glob(pattern)
-    if not files:
-        logger.warning("upload_index: no faiss_index files found at %s", VECTORSTORE_PATH)
+    index_dir = os.path.join(VECTORSTORE_PATH, "faiss_index")
+    if not os.path.isdir(index_dir):
+        logger.warning("upload_index: faiss_index directory not found at %s", index_dir)
         return
-    for path in files:
-        name = os.path.basename(path)
+    for filename in ("index.faiss", "index.pkl"):
+        path = os.path.join(index_dir, filename)
+        if not os.path.isfile(path):
+            logger.warning("upload_index: expected file not found: %s", path)
+            continue
         with open(path, "rb") as f:
             data = f.read()
         try:
-            client.storage.from_(BUCKET).upload(name, data, {"upsert": "true"})
-            logger.info("Uploaded %s to Supabase Storage", name)
+            client.storage.from_(BUCKET).upload(filename, data, {"upsert": "true"})
+            logger.info("Uploaded %s to Supabase Storage", filename)
         except Exception as e1:
-            logger.warning("upload failed (%s), trying update: %s", name, e1)
+            logger.warning("upload failed (%s), trying update: %s", filename, e1)
             try:
-                client.storage.from_(BUCKET).update(name, data)
-                logger.info("Updated %s in Supabase Storage", name)
+                client.storage.from_(BUCKET).update(filename, data)
+                logger.info("Updated %s in Supabase Storage", filename)
             except Exception as e2:
-                logger.error("Failed to sync %s to Supabase Storage: %s", name, e2)
+                logger.error("Failed to sync %s to Supabase Storage: %s", filename, e2)
 
 
 def download_index() -> bool:
-    """Download FAISS index files from Supabase Storage to local disk."""
+    """Download FAISS index files from Supabase Storage into the local faiss_index folder."""
     try:
         client = _get_client()
     except RuntimeError as e:
@@ -99,13 +100,14 @@ def download_index() -> bool:
         logger.info("download_index: bucket is empty — no index to restore")
         return False
 
-    os.makedirs(VECTORSTORE_PATH, exist_ok=True)
+    index_dir = os.path.join(VECTORSTORE_PATH, "faiss_index")
+    os.makedirs(index_dir, exist_ok=True)
     downloaded = False
     for item in items:
         name = item["name"]
         try:
             data = client.storage.from_(BUCKET).download(name)
-            local_path = os.path.join(VECTORSTORE_PATH, name)
+            local_path = os.path.join(index_dir, name)
             with open(local_path, "wb") as f:
                 f.write(data)
             logger.info("Downloaded %s from Supabase Storage", name)
