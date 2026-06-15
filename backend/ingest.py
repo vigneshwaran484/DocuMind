@@ -47,7 +47,7 @@ def parse_document(file_path: str) -> str:
         raise ValueError(f"Unsupported file type: {ext}")
 
 
-def ingest_document(file_path: str, filename: str) -> List[Document]:
+def ingest_document(file_path: str, filename: str, doc_id: str = None) -> List[Document]:
     """
     Parse a document file and split it into chunks.
     Returns a list of LangChain Document objects with metadata.
@@ -62,7 +62,9 @@ def ingest_document(file_path: str, filename: str) -> List[Document]:
         separators=["\n\n", "\n", " ", ""],
     )
 
-    doc_id = str(uuid.uuid4())
+    if doc_id is None:
+        doc_id = str(uuid.uuid4())
+
     chunks = splitter.create_documents(
         [raw_text],
         metadatas=[{"source": filename, "doc_id": doc_id, "file_path": file_path}],

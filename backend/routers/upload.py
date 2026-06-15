@@ -21,13 +21,14 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 def _ingest_in_background(save_path: str, filename: str, doc_id: str):
     try:
-        logger.info("Background ingest started for %s", filename)
-        chunks, doc_id = ingest_document(save_path, filename)
-        logger.info("Ingested %d chunks for %s", len(chunks), filename)
+        print(f"[INGEST] Starting background ingest for {filename} doc_id={doc_id}", flush=True)
+        chunks, _ = ingest_document(save_path, filename, doc_id=doc_id)
+        print(f"[INGEST] Parsed {len(chunks)} chunks for {filename}", flush=True)
         add_documents(chunks, doc_id, filename)
-        logger.info("Successfully indexed %s (doc_id=%s)", filename, doc_id)
+        print(f"[INGEST] Successfully indexed {filename}", flush=True)
     except Exception as e:
-        logger.error("Background ingest FAILED for %s: %s", filename, e, exc_info=True)
+        import traceback
+        print(f"[INGEST ERROR] {filename}: {e}\n{traceback.format_exc()}", flush=True)
         try:
             supa.remove_document(doc_id)
         except Exception:
