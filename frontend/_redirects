@@ -1,0 +1,3 @@
+# Redirect all API requests to the hosted FastAPI backend
+# Replace the URL below with your actual hosted backend URL (e.g. from Render or Railway)
+/api/*  https://your-backend-app.onrender.com/api/:splat  200
