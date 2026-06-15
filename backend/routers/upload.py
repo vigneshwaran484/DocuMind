@@ -4,7 +4,7 @@ POST /api/upload
 """
 import os
 import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.config import UPLOADS_PATH
@@ -16,10 +16,18 @@ router = APIRouter()
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 
+def _ingest_in_background(save_path: str, filename: str):
+    try:
+        chunks, doc_id = ingest_document(save_path, filename)
+        add_documents(chunks, doc_id, filename)
+    except Exception:
+        if os.path.exists(save_path):
+            os.remove(save_path)
+
+
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    """Upload a document, parse it, embed it, and store in FAISS."""
-    # Validate extension
+async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Upload a document, save it, then index it in the background to avoid timeout."""
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -28,7 +36,6 @@ async def upload_document(file: UploadFile = File(...)):
             detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    # Save to disk temporarily
     save_path = os.path.join(UPLOADS_PATH, filename)
     try:
         with open(save_path, "wb") as f:
@@ -36,21 +43,10 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    # Ingest and index
-    try:
-        chunks, doc_id = ingest_document(save_path, filename)
-        add_documents(chunks, doc_id, filename)
-    except ValueError as e:
-        os.remove(save_path)
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        os.remove(save_path)
-        raise HTTPException(status_code=500, detail=f"Indexing failed: {e}")
+    background_tasks.add_task(_ingest_in_background, save_path, filename)
 
     return JSONResponse({
         "success": True,
-        "message": f"'{filename}' indexed successfully.",
-        "doc_id": doc_id,
-        "chunk_count": len(chunks),
+        "message": f"'{filename}' received and is being indexed. It will appear in your document list shortly.",
         "filename": filename,
     })

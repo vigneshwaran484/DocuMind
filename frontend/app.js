@@ -82,7 +82,8 @@ async function handleFiles(files) {
             
             if(!res.ok) throw new Error(data.detail || 'Upload failed');
             
-            showToast(`${file.name} indexed successfully`, 'success');
+            showToast(`${file.name} uploaded! Indexing in background — it'll appear in a few seconds.`, 'success');
+            setTimeout(() => loadDocuments(), 5000);
             await loadDocuments();
 
         } catch (err) {
