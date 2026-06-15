@@ -73,7 +73,9 @@ async function handleFiles(files) {
             const intv = setInterval(() => { if(p < 90) { p+=5; progressBarFill.style.width = p+'%'; } }, 200);
 
             const res = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
-            const data = await res.json();
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); } catch { throw new Error('Backend is waking up. Please wait a moment and try again.'); }
             
             clearInterval(intv);
             progressBarFill.style.width = '100%';
@@ -84,7 +86,10 @@ async function handleFiles(files) {
             await loadDocuments();
 
         } catch (err) {
-            showToast(`Failed: ${err.message}`, 'error');
+            const msg = err.message === 'Failed to fetch'
+            ? 'Backend is waking up. Please wait ~30 seconds and try again.'
+            : `Failed: ${err.message}`;
+        showToast(msg, 'error');
         } finally {
             setTimeout(() => { uploadProgress.style.display = 'none'; progressBarFill.style.width = '0'; }, 1000);
         }
@@ -184,13 +189,18 @@ async function submitQuery() {
             headers:{ 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: text })
         });
-        const data = await res.json();
+        const text2 = await res.text();
+        let data;
+        try { data = JSON.parse(text2); } catch { throw new Error('Server returned an invalid response. The backend may be starting up — please try again in a moment.'); }
         
         if(!res.ok) throw new Error(data.detail || "Failed to get response");
         
         updateAIBox(aiBoxId, data.answer, data.sources);
     } catch(e) {
-        updateAIBox(aiBoxId, `**Error**\n\nThe AI system encountered an issue: ${e.message}`, null, true);
+        const errMsg = (e.message === 'Failed to fetch')
+            ? '**Backend is waking up**\n\nThe server is starting from sleep. Please wait ~30 seconds and try again.'
+            : `**Error**\n\n${e.message}`;
+        updateAIBox(aiBoxId, errMsg, null, true);
     } finally {
         isGenerating = false;
         checkInput();
