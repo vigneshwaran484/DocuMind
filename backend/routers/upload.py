@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from backend.config import UPLOADS_PATH
 from backend.ingest import ingest_document
 from backend.vectorstore import add_documents
+import backend.supabase_store as supa
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -18,7 +19,7 @@ router = APIRouter()
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 
-def _ingest_in_background(save_path: str, filename: str):
+def _ingest_in_background(save_path: str, filename: str, doc_id: str):
     try:
         logger.info("Background ingest started for %s", filename)
         chunks, doc_id = ingest_document(save_path, filename)
@@ -27,6 +28,10 @@ def _ingest_in_background(save_path: str, filename: str):
         logger.info("Successfully indexed %s (doc_id=%s)", filename, doc_id)
     except Exception as e:
         logger.error("Background ingest FAILED for %s: %s", filename, e, exc_info=True)
+        try:
+            supa.remove_document(doc_id)
+        except Exception:
+            pass
         if os.path.exists(save_path):
             os.remove(save_path)
 
@@ -42,6 +47,9 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
             detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
+    import hashlib, time
+    doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
+
     save_path = os.path.join(UPLOADS_PATH, filename)
     try:
         with open(save_path, "wb") as f:
@@ -49,10 +57,17 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    background_tasks.add_task(_ingest_in_background, save_path, filename)
+    # Pre-insert as not-ready so the sidebar shows "indexing" state
+    try:
+        supa.upsert_document(doc_id, filename, chunk_count=0, ready=False)
+    except Exception as e:
+        logger.warning("Could not pre-insert doc metadata: %s", e)
+
+    background_tasks.add_task(_ingest_in_background, save_path, filename, doc_id)
 
     return JSONResponse({
         "success": True,
-        "message": f"'{filename}' received and is being indexed. It will appear in your document list shortly.",
+        "message": f"'{filename}' received and is being indexed.",
         "filename": filename,
+        "doc_id": doc_id,
     })

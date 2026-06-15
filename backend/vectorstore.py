@@ -63,9 +63,9 @@ def add_documents(docs: List[Document], doc_id: str, filename: str) -> None:
 
     _vectorstore.save_local(FAISS_INDEX_FILE)
 
-    # Sync to Supabase
+    # Sync to Supabase — upsert with ready=True only after everything succeeds
     supa.upload_index()
-    supa.upsert_document(doc_id, filename, len(docs))
+    supa.upsert_document(doc_id, filename, len(docs), ready=True)
 
 
 def list_documents() -> List[Dict]:

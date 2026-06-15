@@ -82,8 +82,7 @@ async function handleFiles(files) {
             
             if(!res.ok) throw new Error(data.detail || 'Upload failed');
             
-            showToast(`${file.name} uploaded! Indexing in background — it'll appear in a few seconds.`, 'success');
-            setTimeout(() => loadDocuments(), 5000);
+            showToast(`${file.name} uploaded — indexing in progress…`, 'success');
             await loadDocuments();
 
         } catch (err) {
@@ -97,24 +96,36 @@ async function handleFiles(files) {
     }
 }
 
+let _pollTimer = null;
+
 async function loadDocuments() {
     try {
         const res = await fetch(`${API}/api/documents`);
         const data = await res.json();
         const docs = data.documents || [];
-        docCountBadge.textContent = docs.length;
-        
+        const readyDocs = docs.filter(d => d.ready);
+        docCountBadge.textContent = readyDocs.length;
+
         docList.innerHTML = docs.map(d => `
             <div class="doc-item">
                 <div class="doc-name">
                     <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/></svg>
-                    <span>${d.filename}</span>
+                    <span>${d.filename}${d.ready ? '' : ' <em style="opacity:0.5;font-size:0.8em">(indexing…)</em>'}</span>
                 </div>
-                <button class="del-btn" onclick="deleteDoc('${d.doc_id}', '${d.filename.replace(/'/g,"\\'")}')">
+                ${d.ready ? `<button class="del-btn" onclick="deleteDoc('${d.doc_id}', '${d.filename.replace(/'/g,"\\'")}')">
                     <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/><path d="M19,6l-1,14H6L5,6" stroke="currentColor" stroke-width="2"/><path d="M10,11v6M14,11v6" stroke="currentColor" stroke-width="2"/></svg>
-                </button>
+                </button>` : ''}
             </div>
         `).join('');
+
+        // If any doc is still indexing, keep polling
+        const indexing = docs.some(d => !d.ready);
+        if (indexing) {
+            if (!_pollTimer) _pollTimer = setInterval(loadDocuments, 4000);
+        } else {
+            clearInterval(_pollTimer);
+            _pollTimer = null;
+        }
     } catch (e) {
         console.error("Failed to load documents", e);
     }

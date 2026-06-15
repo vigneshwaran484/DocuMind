@@ -128,15 +128,16 @@ def _ensure_table() -> None:
         pass
 
 
-def upsert_document(doc_id: str, filename: str, chunk_count: int) -> None:
+def upsert_document(doc_id: str, filename: str, chunk_count: int = 0, ready: bool = False) -> None:
     client = _get_client()
     try:
         client.table(TABLE).upsert({
             "doc_id": doc_id,
             "filename": filename,
             "chunk_count": chunk_count,
+            "ready": ready,
         }).execute()
-        logger.info("Upserted document %s (%s) into Supabase", filename, doc_id)
+        logger.info("Upserted document %s (%s) ready=%s into Supabase", filename, doc_id, ready)
     except Exception as e:
         logger.error("Failed to upsert document %s: %s", filename, e)
         raise
