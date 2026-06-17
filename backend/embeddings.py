@@ -1,30 +1,31 @@
 import os
 from typing import List
 from langchain.embeddings.base import Embeddings
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 class GeminiEmbeddings(Embeddings):
     def __init__(self):
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         result = []
         for text in texts:
-            response = genai.embed_content(
-                model="models/text-embedding-004",
-                content=text,
-                task_type="retrieval_document"
+            response = self.client.models.embed_content(
+                model="text-embedding-004",
+                contents=text,
+                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
             )
-            result.append(response["embedding"])
+            result.append(response.embeddings[0].values)
         return result
     
     def embed_query(self, text: str) -> List[float]:
-        response = genai.embed_content(
-            model="models/text-embedding-004",
-            content=text,
-            task_type="retrieval_query"
+        response = self.client.models.embed_content(
+            model="text-embedding-004",
+            contents=text,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY")
         )
-        return response["embedding"]
+        return response.embeddings[0].values
 
 def get_embeddings() -> GeminiEmbeddings:
     return GeminiEmbeddings()
