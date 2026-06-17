@@ -41,6 +41,14 @@ async def debug():
     conn = test_connection()
     return {"supabase": conn}
 
+@app.get("/api/config", tags=["Health"])
+async def config():
+    from backend.config import SUPABASE_URL, SUPABASE_KEY
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_key": SUPABASE_KEY
+    }
+
 # ── Serve Frontend Static Files ───────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 

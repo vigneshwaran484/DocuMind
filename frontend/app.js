@@ -2,11 +2,19 @@ const API = '';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
-const _supabase = createClient('SUPABASE_URL_PLACEHOLDER', 'SUPABASE_ANON_KEY_PLACEHOLDER');
-
+let _supabase = null;
 let _session = null;
 
 async function initAuth() {
+    try {
+        const configRes = await fetch('/api/config');
+        const config = await configRes.json();
+        _supabase = createClient(config.supabase_url, config.supabase_key);
+    } catch (err) {
+        console.error("Failed to load config from backend", err);
+        _supabase = createClient('SUPABASE_URL_PLACEHOLDER', 'SUPABASE_ANON_KEY_PLACEHOLDER');
+    }
+
     const { data } = await _supabase.auth.getSession();
     if (!data.session) { window.location.href = '/login'; return; }
     _session = data.session;
