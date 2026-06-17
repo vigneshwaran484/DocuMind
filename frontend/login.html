@@ -217,15 +217,16 @@
     try {
       const res = await fetch('/api/config');
       const config = await res.json();
+      if (!config.supabase_url || !config.supabase_key || config.supabase_url.includes('PLACEHOLDER')) {
+        throw new Error("Supabase credentials are not configured in your backend .env file.");
+      }
       _supabase = createClient(config.supabase_url, config.supabase_key);
+      const { data } = await _supabase.auth.getSession();
+      if (data && data.session) window.location.href = '/';
     } catch (e) {
-      console.error("Failed to load config from backend", e);
-      _supabase = createClient('SUPABASE_URL_PLACEHOLDER', 'SUPABASE_ANON_KEY_PLACEHOLDER');
+      console.error("Failed to initialize Supabase:", e);
+      showMsg("Configuration error: " + e.message, "error");
     }
-    
-    // Check if session already exists
-    const { data } = await _supabase.auth.getSession();
-    if (data.session) window.location.href = '/';
   }
 
   const initPromise = initSupabase();

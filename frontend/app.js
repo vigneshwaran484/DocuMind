@@ -9,26 +9,39 @@ async function initAuth() {
     try {
         const configRes = await fetch('/api/config');
         const config = await configRes.json();
+        if (!config.supabase_url || !config.supabase_key || config.supabase_url.includes('PLACEHOLDER')) {
+            throw new Error("Invalid or unconfigured Supabase credentials.");
+        }
         _supabase = createClient(config.supabase_url, config.supabase_key);
+        
+        const { data } = await _supabase.auth.getSession();
+        if (!data || !data.session) {
+            window.location.href = '/login';
+            return;
+        }
+        _session = data.session;
+        
+        // Show user email in sidebar
+        const nameEl = document.querySelector('.user-name');
+        if (nameEl) nameEl.textContent = _session.user.email.split('@')[0];
     } catch (err) {
-        console.error("Failed to load config from backend", err);
-        _supabase = createClient('SUPABASE_URL_PLACEHOLDER', 'SUPABASE_ANON_KEY_PLACEHOLDER');
+        console.error("Auth initialization failed, redirecting to login:", err);
+        window.location.href = '/login';
     }
-
-    const { data } = await _supabase.auth.getSession();
-    if (!data.session) { window.location.href = '/login'; return; }
-    _session = data.session;
-    // Show user email in sidebar
-    const nameEl = document.querySelector('.user-name');
-    if (nameEl) nameEl.textContent = _session.user.email.split('@')[0];
 }
 
 function authHeaders() {
-    return { 'Authorization': `Bearer ${_session.token_type === 'bearer' ? _session.access_token : _session.access_token}` };
+    return { 'Authorization': `Bearer ${_session?.access_token || ''}` };
 }
 
 async function logout() {
-    await _supabase.auth.signOut();
+    try {
+        if (_supabase) {
+            await _supabase.auth.signOut();
+        }
+    } catch (e) {
+        console.error("Supabase signOut error:", e);
+    }
     window.location.href = '/login';
 }
 
