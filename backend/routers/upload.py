@@ -4,33 +4,32 @@ POST /api/upload
 """
 import os
 import shutil
-import logging
-from fastapi import APIRouter, BackgroundTasks, UploadFile, File, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.config import UPLOADS_PATH
 from backend.ingest import ingest_document
 from backend.vectorstore import add_documents
+from backend.auth import get_current_user
 import backend.supabase_store as supa
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 
-def _ingest_in_background(save_path: str, filename: str, doc_id: str):
+def _ingest_in_background(save_path: str, filename: str, doc_id: str, user_id: str):
     try:
-        print(f"[INGEST] Starting background ingest for {filename} doc_id={doc_id}", flush=True)
+        print(f"[INGEST] Starting for {filename} user={user_id}", flush=True)
         chunks, _ = ingest_document(save_path, filename, doc_id=doc_id)
-        print(f"[INGEST] Parsed {len(chunks)} chunks for {filename}", flush=True)
-        add_documents(chunks, doc_id, filename)
-        print(f"[INGEST] Successfully indexed {filename}", flush=True)
+        print(f"[INGEST] {len(chunks)} chunks parsed for {filename}", flush=True)
+        add_documents(chunks, doc_id, filename, user_id)
+        print(f"[INGEST] Done: {filename} for user {user_id}", flush=True)
     except Exception as e:
         import traceback
         print(f"[INGEST ERROR] {filename}: {e}\n{traceback.format_exc()}", flush=True)
         try:
-            supa.remove_document(doc_id)
+            supa.remove_document(doc_id, user_id)
         except Exception:
             pass
         if os.path.exists(save_path):
@@ -38,8 +37,12 @@ def _ingest_in_background(save_path: str, filename: str, doc_id: str):
 
 
 @router.post("/upload")
-async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    """Upload a document, save it, then index it in the background to avoid timeout."""
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    user_id = user.id
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -49,22 +52,24 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         )
 
     import hashlib, time
-    doc_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:12]
+    doc_id = hashlib.md5(f"{user_id}{filename}{time.time()}".encode()).hexdigest()[:12]
 
-    save_path = os.path.join(UPLOADS_PATH, filename)
+    user_upload_dir = os.path.join(UPLOADS_PATH, user_id)
+    os.makedirs(user_upload_dir, exist_ok=True)
+    save_path = os.path.join(user_upload_dir, filename)
+
     try:
         with open(save_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    # Pre-insert as not-ready so the sidebar shows "indexing" state
     try:
-        supa.upsert_document(doc_id, filename, chunk_count=0, ready=False)
+        supa.upsert_document(doc_id, filename, user_id, chunk_count=0, ready=False)
     except Exception as e:
-        logger.warning("Could not pre-insert doc metadata: %s", e)
+        print(f"[UPLOAD] Pre-insert warning: {e}", flush=True)
 
-    background_tasks.add_task(_ingest_in_background, save_path, filename, doc_id)
+    background_tasks.add_task(_ingest_in_background, save_path, filename, doc_id, user_id)
 
     return JSONResponse({
         "success": True,

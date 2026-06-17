@@ -26,9 +26,9 @@ Question: {question}
 Detailed Answer:"""
 
 
-def get_qa_chain() -> RetrievalQA:
-    """Build and return a RetrievalQA chain."""
-    vs = get_vectorstore()
+def get_qa_chain(user_id: str) -> RetrievalQA:
+    """Build and return a RetrievalQA chain for the given user."""
+    vs = get_vectorstore(user_id)
     if vs is None:
         raise ValueError("No documents have been indexed yet. Please upload documents first.")
 
@@ -52,12 +52,9 @@ def get_qa_chain() -> RetrievalQA:
     return chain
 
 
-def answer_question(question: str) -> Dict[str, Any]:
-    """
-    Run the RAG pipeline for a given question.
-    Returns {answer, sources}.
-    """
-    chain = get_qa_chain()
+def answer_question(question: str, user_id: str) -> Dict[str, Any]:
+    """Run the RAG pipeline for a given user's question."""
+    chain = get_qa_chain(user_id)
     result = chain.invoke({"query": question})
 
     sources = []

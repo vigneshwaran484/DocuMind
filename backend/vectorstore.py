@@ -1,7 +1,6 @@
 """
-vectorstore.py – FAISS vector store management
-Handles: create, add documents, persist, load, list, delete by doc_id
-Persistence: Supabase Storage (FAISS index) + Supabase Postgres (metadata)
+vectorstore.py – Per-user FAISS vector store management.
+Each user has their own isolated FAISS index stored in Supabase Storage.
 """
 import os
 from typing import List, Optional, Dict
@@ -13,76 +12,76 @@ from backend.config import VECTORSTORE_PATH
 from backend.embeddings import get_embeddings
 import backend.supabase_store as supa
 
-FAISS_INDEX_FILE = os.path.join(VECTORSTORE_PATH, "faiss_index")
+# In-memory cache: user_id -> FAISS instance
+_stores: Dict[str, FAISS] = {}
 
-_vectorstore: Optional[FAISS] = None
+
+def _local_index_path(user_id: str) -> str:
+    return os.path.join(VECTORSTORE_PATH, user_id, "faiss_index")
 
 
-def load_vectorstore() -> Optional[FAISS]:
-    """Load FAISS index — from memory, local disk, or Supabase (in that order)."""
-    global _vectorstore
-    if _vectorstore is not None:
-        return _vectorstore
+def load_vectorstore(user_id: str) -> Optional[FAISS]:
+    """Load FAISS for a user — from memory, local disk, or Supabase."""
+    if user_id in _stores:
+        return _stores[user_id]
 
-    # Try local disk first (already downloaded this session)
-    if os.path.exists(FAISS_INDEX_FILE):
-        _vectorstore = FAISS.load_local(
-            FAISS_INDEX_FILE,
-            get_embeddings(),
-            allow_dangerous_deserialization=True,
-        )
-        return _vectorstore
+    local_path = _local_index_path(user_id)
 
-    # Try fetching from Supabase
-    try:
-        if supa.download_index():
-            _vectorstore = FAISS.load_local(
-                FAISS_INDEX_FILE,
-                get_embeddings(),
-                allow_dangerous_deserialization=True,
+    if os.path.exists(local_path):
+        try:
+            _stores[user_id] = FAISS.load_local(
+                local_path, get_embeddings(), allow_dangerous_deserialization=True
             )
-    except Exception:
-        pass
+            return _stores[user_id]
+        except Exception as e:
+            print(f"[VS] Failed to load local index for {user_id}: {e}", flush=True)
 
-    return _vectorstore
+    try:
+        if supa.download_index(user_id):
+            _stores[user_id] = FAISS.load_local(
+                local_path, get_embeddings(), allow_dangerous_deserialization=True
+            )
+            return _stores[user_id]
+    except Exception as e:
+        print(f"[VS] Failed to download index for {user_id}: {e}", flush=True)
+
+    return None
 
 
-def get_vectorstore() -> Optional[FAISS]:
-    return load_vectorstore()
+def get_vectorstore(user_id: str) -> Optional[FAISS]:
+    return load_vectorstore(user_id)
 
 
-def add_documents(docs: List[Document], doc_id: str, filename: str) -> None:
-    """Add chunked documents to FAISS, persist locally, then sync to Supabase."""
-    global _vectorstore
+def add_documents(docs: List[Document], doc_id: str, filename: str, user_id: str) -> None:
+    """Embed and index documents for a user, then persist to Supabase."""
     embeddings = get_embeddings()
 
-    if _vectorstore is None:
-        _vectorstore = FAISS.from_documents(docs, embeddings)
+    if user_id in _stores:
+        _stores[user_id].add_documents(docs)
     else:
-        _vectorstore.add_documents(docs)
+        _stores[user_id] = FAISS.from_documents(docs, embeddings)
 
-    _vectorstore.save_local(FAISS_INDEX_FILE)
+    local_path = _local_index_path(user_id)
+    _stores[user_id].save_local(local_path)
 
-    # Sync to Supabase — upsert with ready=True only after everything succeeds
-    supa.upload_index()
-    supa.upsert_document(doc_id, filename, len(docs), ready=True)
+    supa.upload_index(user_id)
+    supa.upsert_document(doc_id, filename, user_id, chunk_count=len(docs), ready=True)
 
 
-def list_documents() -> List[Dict]:
-    """Return list of indexed documents from Supabase Postgres."""
+def list_documents(user_id: str) -> List[Dict]:
     try:
-        return supa.fetch_documents()
+        return supa.fetch_documents(user_id)
     except Exception:
         return []
 
 
-def delete_document(doc_id: str) -> bool:
+def delete_document(doc_id: str, user_id: str) -> bool:
     try:
-        supa.remove_document(doc_id)
+        supa.remove_document(doc_id, user_id)
         return True
     except Exception:
         return False
 
 
-def index_exists() -> bool:
-    return load_vectorstore() is not None
+def index_exists(user_id: str) -> bool:
+    return get_vectorstore(user_id) is not None

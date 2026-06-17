@@ -1,4 +1,28 @@
-const API = ''; 
+const API = '';
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const { createClient } = supabase;
+const _supabase = createClient('SUPABASE_URL_PLACEHOLDER', 'SUPABASE_ANON_KEY_PLACEHOLDER');
+
+let _session = null;
+
+async function initAuth() {
+    const { data } = await _supabase.auth.getSession();
+    if (!data.session) { window.location.href = '/login'; return; }
+    _session = data.session;
+    // Show user email in sidebar
+    const nameEl = document.querySelector('.user-name');
+    if (nameEl) nameEl.textContent = _session.user.email.split('@')[0];
+}
+
+function authHeaders() {
+    return { 'Authorization': `Bearer ${_session.token_type === 'bearer' ? _session.access_token : _session.access_token}` };
+}
+
+async function logout() {
+    await _supabase.auth.signOut();
+    window.location.href = '/login';
+}
 
 // DOM Elements
 const uploadZone = document.getElementById('uploadZone');
@@ -26,7 +50,9 @@ const SUGGESTIONS = [
 let isGenerating = false;
 
 // Initialization
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initAuth();
+    if (!_session) return;
     loadDocuments();
     renderSuggestions();
 });
@@ -72,7 +98,7 @@ async function handleFiles(files) {
             let p = 20;
             const intv = setInterval(() => { if(p < 90) { p+=5; progressBarFill.style.width = p+'%'; } }, 200);
 
-            const res = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
+            const res = await fetch(`${API}/api/upload`, { method: 'POST', body: fd, headers: authHeaders() });
             const text = await res.text();
             let data;
             try { data = JSON.parse(text); } catch { throw new Error('Backend is waking up. Please wait a moment and try again.'); }
@@ -100,7 +126,7 @@ let _pollTimer = null;
 
 async function loadDocuments() {
     try {
-        const res = await fetch(`${API}/api/documents`);
+        const res = await fetch(`${API}/api/documents`, { headers: authHeaders() });
         const data = await res.json();
         const docs = data.documents || [];
         const readyDocs = docs.filter(d => d.ready);
@@ -112,9 +138,9 @@ async function loadDocuments() {
                     <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/></svg>
                     <span>${d.filename}${d.ready ? '' : ' <em style="opacity:0.5;font-size:0.8em">(indexing…)</em>'}</span>
                 </div>
-                ${d.ready ? `<button class="del-btn" onclick="deleteDoc('${d.doc_id}', '${d.filename.replace(/'/g,"\\'")}')">
+                <button class="del-btn" onclick="deleteDoc('${d.doc_id}', '${d.filename.replace(/'/g,"\\'")}')" title="Delete document">
                     <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/><path d="M19,6l-1,14H6L5,6" stroke="currentColor" stroke-width="2"/><path d="M10,11v6M14,11v6" stroke="currentColor" stroke-width="2"/></svg>
-                </button>` : ''}
+                </button>
             </div>
         `).join('');
 
@@ -134,7 +160,7 @@ async function loadDocuments() {
 async function deleteDoc(id, name) {
     if(!confirm(`Remove ${name} from vector store?`)) return;
     try {
-        await fetch(`${API}/api/documents/${id}`, { method:'DELETE' });
+        await fetch(`${API}/api/documents/${id}`, { method:'DELETE', headers: authHeaders() });
         showToast(`Removed ${name}`, 'success');
         loadDocuments();
     } catch(e) {
@@ -198,7 +224,7 @@ async function submitQuery() {
     try {
         const res = await fetch(`${API}/api/query`, {
             method: 'POST',
-            headers:{ 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ question: text })
         });
         const text2 = await res.text();

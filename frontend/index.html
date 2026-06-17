@@ -64,6 +64,9 @@
             <span class="user-name">User</span>
             <span class="system-status" id="statusText">System Ready</span>
           </div>
+          <button onclick="logout()" title="Sign out" style="background:none;border:none;cursor:pointer;color:#8b949e;padding:4px;border-radius:6px;display:flex;align-items:center;" onmouseover="this.style.color='#f85149'" onmouseout="this.style.color='#8b949e'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -115,6 +118,7 @@
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

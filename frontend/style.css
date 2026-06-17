@@ -226,7 +226,7 @@ body {
 }
 .doc-item svg { width: 16px; height: 16px; opacity: 0.7; }
 .doc-item:hover svg { color: var(--accent); opacity: 1; }
-.del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; opacity: 0; padding: 4px; transition: all 0.2s; border-radius: 4px; }
+.del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; opacity: 0.6; padding: 6px; transition: all 0.2s; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
 .doc-item:hover .del-btn { opacity: 1; }
 .del-btn:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
 

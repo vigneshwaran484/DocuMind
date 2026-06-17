@@ -1,9 +1,9 @@
 """
-supabase_store.py – Sync FAISS index files to Supabase Storage
-               and doc metadata to Supabase Postgres.
+supabase_store.py – Per-user Supabase Storage (FAISS) + Postgres (metadata).
 
-Storage bucket : "vectorstore"  (create once in Supabase dashboard)
-Postgres table : "documents"    (created automatically on first use)
+Storage layout : vectorstore/{user_id}/index.faiss
+                               {user_id}/index.pkl
+Postgres table : documents  (doc_id, user_id, filename, chunk_count, ready, created_at)
 """
 import os
 import logging
@@ -11,154 +11,146 @@ from typing import List, Dict, Optional
 
 from supabase import create_client, Client
 
-from backend.config import SUPABASE_URL, SUPABASE_KEY, VECTORSTORE_PATH
+from backend.config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY, VECTORSTORE_PATH
 
 logger = logging.getLogger(__name__)
 
 BUCKET = "vectorstore"
 TABLE = "documents"
 
-_client: Optional[Client] = None
+_anon_client: Optional[Client] = None
+_service_client: Optional[Client] = None
 
 
-def _get_client() -> Client:
-    global _client
-    if _client is None:
-        if not SUPABASE_URL or not SUPABASE_KEY:
-            raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set — add them to your .env file")
-        _client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        logger.info("Supabase client created for %s", SUPABASE_URL)
-    return _client
+def _get_anon_client() -> Client:
+    global _anon_client
+    if _anon_client is None:
+        _anon_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return _anon_client
+
+
+def _get_service_client() -> Client:
+    """Service role client — bypasses RLS, used for all backend writes/reads."""
+    global _service_client
+    if _service_client is None:
+        key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
+        _service_client = create_client(SUPABASE_URL, key)
+    return _service_client
 
 
 def test_connection() -> dict:
-    """Test Supabase connectivity. Returns a dict with status and details."""
     result = {"url": SUPABASE_URL or "(not set)", "db": False, "storage": False, "errors": []}
     try:
-        client = _get_client()
-    except RuntimeError as e:
+        client = _get_service_client()
+    except Exception as e:
         result["errors"].append(str(e))
         return result
-
     try:
         client.table(TABLE).select("doc_id").limit(1).execute()
         result["db"] = True
     except Exception as e:
         result["errors"].append(f"DB error: {e}")
-
     try:
         client.storage.from_(BUCKET).list()
         result["storage"] = True
     except Exception as e:
         result["errors"].append(f"Storage error: {e}")
-
     return result
 
 
 # ── FAISS index sync ──────────────────────────────────────────────────────────
 
-def upload_index() -> None:
-    """Upload the two FAISS index files (index.faiss, index.pkl) to Supabase Storage."""
-    client = _get_client()
-    index_dir = os.path.join(VECTORSTORE_PATH, "faiss_index")
-    if not os.path.isdir(index_dir):
-        logger.warning("upload_index: faiss_index directory not found at %s", index_dir)
-        return
+def _local_index_dir(user_id: str) -> str:
+    path = os.path.join(VECTORSTORE_PATH, user_id, "faiss_index")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def upload_index(user_id: str) -> None:
+    """Upload the user's FAISS index files to Supabase Storage."""
+    client = _get_service_client()
+    index_dir = _local_index_dir(user_id)
     for filename in ("index.faiss", "index.pkl"):
         path = os.path.join(index_dir, filename)
         if not os.path.isfile(path):
-            logger.warning("upload_index: expected file not found: %s", path)
+            logger.warning("upload_index: missing %s for user %s", filename, user_id)
             continue
         with open(path, "rb") as f:
             data = f.read()
+        storage_path = f"{user_id}/{filename}"
         try:
-            client.storage.from_(BUCKET).upload(filename, data, {"upsert": "true"})
-            logger.info("Uploaded %s to Supabase Storage", filename)
+            client.storage.from_(BUCKET).upload(storage_path, data, {"upsert": "true"})
+            logger.info("Uploaded %s for user %s", filename, user_id)
         except Exception as e1:
-            logger.warning("upload failed (%s), trying update: %s", filename, e1)
             try:
-                client.storage.from_(BUCKET).update(filename, data)
-                logger.info("Updated %s in Supabase Storage", filename)
+                client.storage.from_(BUCKET).update(storage_path, data)
+                logger.info("Updated %s for user %s", filename, user_id)
             except Exception as e2:
-                logger.error("Failed to sync %s to Supabase Storage: %s", filename, e2)
+                logger.error("Failed to sync %s for user %s: %s", filename, user_id, e2)
 
 
-def download_index() -> bool:
-    """Download FAISS index files from Supabase Storage into the local faiss_index folder."""
+def download_index(user_id: str) -> bool:
+    """Download the user's FAISS index files from Supabase Storage."""
+    client = _get_service_client()
     try:
-        client = _get_client()
-    except RuntimeError as e:
-        logger.error("download_index: %s", e)
-        return False
-    try:
-        items = client.storage.from_(BUCKET).list()
+        items = client.storage.from_(BUCKET).list(user_id)
     except Exception as e:
-        logger.error("download_index: failed to list bucket: %s", e)
+        logger.error("download_index: failed to list %s: %s", user_id, e)
         return False
 
     if not items:
-        logger.info("download_index: bucket is empty — no index to restore")
+        logger.info("download_index: no files found for user %s", user_id)
         return False
 
-    index_dir = os.path.join(VECTORSTORE_PATH, "faiss_index")
-    os.makedirs(index_dir, exist_ok=True)
+    index_dir = _local_index_dir(user_id)
     downloaded = False
     for item in items:
         name = item["name"]
+        storage_path = f"{user_id}/{name}"
         try:
-            data = client.storage.from_(BUCKET).download(name)
-            local_path = os.path.join(index_dir, name)
-            with open(local_path, "wb") as f:
+            data = client.storage.from_(BUCKET).download(storage_path)
+            with open(os.path.join(index_dir, name), "wb") as f:
                 f.write(data)
-            logger.info("Downloaded %s from Supabase Storage", name)
+            logger.info("Downloaded %s for user %s", name, user_id)
             downloaded = True
         except Exception as e:
-            logger.error("Failed to download %s: %s", name, e)
+            logger.error("Failed to download %s for user %s: %s", name, user_id, e)
     return downloaded
 
 
 # ── Metadata (Postgres) ───────────────────────────────────────────────────────
 
-def _ensure_table() -> None:
-    """Create the documents table if it doesn't exist via RPC (best-effort)."""
-    client = _get_client()
-    try:
-        client.table(TABLE).select("doc_id").limit(1).execute()
-    except Exception:
-        pass
-
-
-def upsert_document(doc_id: str, filename: str, chunk_count: int = 0, ready: bool = False) -> None:
-    client = _get_client()
+def upsert_document(doc_id: str, filename: str, user_id: str, chunk_count: int = 0, ready: bool = False) -> None:
+    client = _get_service_client()
     try:
         client.table(TABLE).upsert({
             "doc_id": doc_id,
+            "user_id": user_id,
             "filename": filename,
             "chunk_count": chunk_count,
             "ready": ready,
         }).execute()
-        logger.info("Upserted document %s (%s) ready=%s into Supabase", filename, doc_id, ready)
+        logger.info("Upserted doc %s for user %s ready=%s", filename, user_id, ready)
     except Exception as e:
-        logger.error("Failed to upsert document %s: %s", filename, e)
+        logger.error("Failed to upsert doc %s: %s", filename, e)
         raise
 
 
-def remove_document(doc_id: str) -> None:
-    client = _get_client()
+def remove_document(doc_id: str, user_id: str) -> None:
+    client = _get_service_client()
     try:
-        client.table(TABLE).delete().eq("doc_id", doc_id).execute()
-        logger.info("Deleted document %s from Supabase", doc_id)
+        client.table(TABLE).delete().eq("doc_id", doc_id).eq("user_id", user_id).execute()
+        logger.info("Deleted doc %s for user %s", doc_id, user_id)
     except Exception as e:
-        logger.error("Failed to delete document %s: %s", doc_id, e)
+        logger.error("Failed to delete doc %s: %s", doc_id, e)
         raise
 
 
-def fetch_documents() -> List[Dict]:
+def fetch_documents(user_id: str) -> List[Dict]:
+    client = _get_service_client()
     try:
-        client = _get_client()
-        res = client.table(TABLE).select("*").execute()
-        logger.info("Fetched %d documents from Supabase", len(res.data or []))
+        res = client.table(TABLE).select("*").eq("user_id", user_id).execute()
         return res.data or []
     except Exception as e:
-        logger.error("fetch_documents failed: %s", e)
+        logger.error("fetch_documents failed for user %s: %s", user_id, e)
         return []

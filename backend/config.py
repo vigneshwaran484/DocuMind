@@ -16,6 +16,7 @@ VECTORSTORE_PATH: str = os.getenv("VECTORSTORE_PATH", "./vectorstore")
 UPLOADS_PATH: str = os.getenv("UPLOADS_PATH", "./uploads")
 SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 # Ensure directories exist
 os.makedirs(VECTORSTORE_PATH, exist_ok=True)
