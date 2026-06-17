@@ -7,24 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from contextlib import asynccontextmanager
 from backend.routers import upload, query, documents
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Pre-load embedding model on startup
-    print("[STARTUP] Pre-loading embedding model...", flush=True)
-    from backend.embeddings import get_embeddings
-    get_embeddings()
-    print("[STARTUP] Embedding model ready.", flush=True)
-    yield
 
 # ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Enterprise RAG Q&A System",
     description="Upload enterprise documents and ask intelligent questions powered by Groq LLM.",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
