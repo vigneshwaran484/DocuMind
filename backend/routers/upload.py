@@ -69,6 +69,7 @@ async def upload_document(
     except Exception as e:
         print(f"[UPLOAD] Pre-insert warning: {e}", flush=True)
 
+    print(f"[UPLOAD] user_id={user_id} filename={filename} doc_id={doc_id}", flush=True)
     background_tasks.add_task(_ingest_in_background, save_path, filename, doc_id, user_id)
 
     return JSONResponse({
