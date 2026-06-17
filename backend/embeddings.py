@@ -14,7 +14,7 @@ class GeminiEmbeddings(Embeddings):
         result = []
         for text in texts:
             response = self.client.models.embed_content(
-                model="text-embedding-004",
+                model="gemini-embedding-exp-03-07",
                 contents=text
             )
             result.append(response.embeddings[0].values)
