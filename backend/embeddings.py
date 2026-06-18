@@ -1,29 +1,29 @@
 import os
-import requests
+import pickle
+import numpy as np
 from typing import List
 from langchain.embeddings.base import Embeddings
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{HF_MODEL}"
-
-class HuggingFaceAPIEmbeddings(Embeddings):
+class TFIDFEmbeddings(Embeddings):
     def __init__(self):
-        self.headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+        self.vectorizer = TfidfVectorizer(max_features=384)
+        self.fitted = False
 
-    def _embed(self, texts: List[str]) -> List[List[float]]:
-        response = requests.post(
-            HF_API_URL,
-            headers=self.headers,
-            json={"inputs": texts, "options": {"wait_for_model": True}}
-        )
-        response.raise_for_status()
-        return response.json()
+    def _fit_and_transform(self, texts: List[str]) -> List[List[float]]:
+        vectors = self.vectorizer.fit_transform(texts)
+        self.fitted = True
+        return vectors.toarray().tolist()
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return self._embed(texts)
+        return self._fit_and_transform(texts)
 
     def embed_query(self, text: str) -> List[float]:
-        return self._embed([text])[0]
+        if not self.fitted:
+            self.vectorizer.fit([text])
+            self.fitted = True
+        vector = self.vectorizer.transform([text])
+        return vector.toarray()[0].tolist()
 
-def get_embeddings() -> HuggingFaceAPIEmbeddings:
-    return HuggingFaceAPIEmbeddings()
+def get_embeddings() -> TFIDFEmbeddings:
+    return TFIDFEmbeddings()
